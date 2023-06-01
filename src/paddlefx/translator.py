@@ -422,6 +422,7 @@ class InstructionTranslatorBase:
         self.push(self.f_locals[inst.argval])
 
     def RETURN_VALUE(self, inst: Instruction):
+        print("RETURN_VALUE triggered")
         self.output.compile_subgraph(self)
         self.output.add_output_instructions(
             [
