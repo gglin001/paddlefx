@@ -117,6 +117,7 @@ def has_tensor_in_frame(frame: types.FrameType) -> bool:
 def convert_frame_assert(compiler_fn: Callable):
     def _convert_frame_assert(frame: types.FrameType):
         if not has_tensor_in_frame(frame):
+            print(f"frame skipped: {frame.f_code.co_name}")
             return None
 
         return _compile(frame, compiler_fn)
