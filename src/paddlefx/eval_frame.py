@@ -47,6 +47,9 @@ class DynamoContext:
             # set_eval_frame(old_callback)
             # return result
 
+        # compiled fn
+        _fn.fn = fn
+
         return _fn
 
 

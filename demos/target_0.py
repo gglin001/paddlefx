@@ -17,7 +17,13 @@ def my_compiler(gl: paddlefx.GraphLayer, example_inputs: list[paddle.Tensor] = N
     # gl.graph.print_tabular()
     # return gl.forward
 
-    return print
+    def dummy_print(*args, **kwargs):
+        print("\n==== dummy_print: ")
+        for arg in args:
+            print(arg)
+        print("==== fin dummy_print\n")
+
+    return dummy_print
 
 
 @paddlefx.optimize(my_compiler)
