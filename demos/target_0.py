@@ -24,7 +24,7 @@ def my_compiler(gl: paddlefx.GraphLayer, example_inputs: list[paddle.Tensor] = N
 def add(x, y):
     # print('call add')
     z = x + y
-    return
+    return z
 
 
 in_a = paddle.rand([1])
