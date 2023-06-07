@@ -159,7 +159,7 @@ class OutputGraph(Tracer):
         from .codegen import PyCodegen
         from .eval_frame import disable
 
-        # self.create_node("output", "output", tuple(x for x in rv), {})
+        self.create_node("output", "output", tuple(x for x in rv), {})
 
         gl = GraphLayer(root, self.graph)
         compiled_fn = self.call_user_compiler(gl)
