@@ -83,10 +83,11 @@ class GraphLayer(paddle.nn.Layer):
     def recompile(self):
         python_code = self.get_source()
         self._code = python_code
-        _globals = {}
+        # TODO: globals needs to be recorded
+        globals = {}
 
         cls = type(self)
-        cls.forward = _forward_from_src(self._code, _globals)
+        cls.forward = _forward_from_src(self._code, globals)
 
         return python_code
 
