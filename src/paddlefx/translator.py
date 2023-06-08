@@ -18,6 +18,8 @@ from .symbolic_trace import Tracer
 
 __all__ = ['OutputGraph', 'Instruction', 'InstructionTranslator', 'convert_instruction']
 
+# TODO: better code organization
+
 
 @dataclasses.dataclass
 class InstructionExnTabEntry:
@@ -58,7 +60,7 @@ class Instruction:
     is_jump_target: bool = False
     # extra fields to make modification easier:
     target: Instruction | None = None
-    exn_tab_entry: Optional[InstructionExnTabEntry] = None
+    exn_tab_entry: InstructionExnTabEntry | None = None
 
     def __hash__(self):
         return id(self)
@@ -112,9 +114,6 @@ def _not_implemented(op_name):
 
 
 _unique_id_counter = itertools.count()
-
-
-# TODO: better code organization
 
 
 def unique_id(name):
