@@ -5,6 +5,8 @@ import logging
 # ignore DeprecationWarning from `pkg_resources`
 logging.captureWarnings(True)
 
+logging.basicConfig(level=logging.DEBUG, format="%(message)s")
+
 
 import paddle
 import paddle.nn
@@ -14,7 +16,7 @@ import paddlefx
 
 def my_compiler(gl: paddlefx.GraphLayer, example_inputs: list[paddle.Tensor] = None):
     print("my_compiler() called with FX graph:")
-    # gl.graph.print_tabular()
+    gl.graph.print_tabular()
 
     # TODO: mv recompile() out of it
     code = gl.recompile()
@@ -22,13 +24,13 @@ def my_compiler(gl: paddlefx.GraphLayer, example_inputs: list[paddle.Tensor] = N
     # [print(x) for x in dis.get_instructions(gl.forward)]
     return gl.forward
 
-    def dummy_print(*args, **kwargs):
-        print("\n==== dummy_print: ")
-        for arg in args:
-            print(arg)
-        print("==== fin dummy_print\n")
-
-    return dummy_print
+    # # dummy_print
+    # def dummy_print(*args, **kwargs):
+    #     print("\n==== dummy_print: ")
+    #     for arg in args:
+    #         print(arg)
+    #     print("==== fin dummy_print\n")
+    # return dummy_print
 
 
 @paddlefx.optimize(my_compiler)

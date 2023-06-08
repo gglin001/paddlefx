@@ -3,6 +3,7 @@ from __future__ import annotations
 import dataclasses
 import dis
 import functools
+import logging
 import types
 
 from typing import Callable
@@ -84,13 +85,13 @@ def _compile(
 
     out_code = transform_code_object(f_code, transform)
 
-    print(f"\nraw_code:")
-    [print(x) for x in list(dis.get_instructions(f_code))]
-    print(f"")
+    logging.debug(f"\nraw_code:")
+    [logging.debug(x) for x in list(dis.get_instructions(f_code))]
+    logging.debug(f"")
 
-    print(f"\ntransformed_code:")
-    [print(x) for x in list(dis.get_instructions(out_code))]
-    print(f"")
+    logging.debug(f"\ntransformed_code:")
+    [logging.debug(x) for x in list(dis.get_instructions(out_code))]
+    logging.debug(f"")
 
     # debug, no trace
     # return None
@@ -117,7 +118,7 @@ def has_tensor_in_frame(frame: types.FrameType) -> bool:
 def convert_frame_assert(compiler_fn: Callable):
     def _convert_frame_assert(frame: types.FrameType):
         if not has_tensor_in_frame(frame):
-            print(f"frame skipped: {frame.f_code.co_name}")
+            logging.debug(f"frame skipped: {frame.f_code.co_name}")
             return None
 
         return _compile(frame, compiler_fn)

@@ -3,6 +3,7 @@ from __future__ import annotations
 import dataclasses
 import dis
 import itertools
+import logging
 import operator
 import types
 
@@ -167,13 +168,13 @@ class OutputGraph(Tracer):
 
         name = unique_id("__compiled_fn")
 
-        print(f"\n{name}:")
-        [print(x) for x in list(dis.get_instructions(compiled_fn))]
-        print(f"")
+        logging.debug(f"\n{name}:")
+        [logging.debug(x) for x in list(dis.get_instructions(compiled_fn))]
+        logging.debug(f"")
 
-        print(f"\n{name}.fn:")
-        [print(x) for x in list(dis.get_instructions(compiled_fn.fn))]
-        print(f"")
+        logging.debug(f"\n{name}.fn:")
+        [logging.debug(x) for x in list(dis.get_instructions(compiled_fn.fn))]
+        logging.debug(f"")
 
         self.install_global(name, compiled_fn)
 
