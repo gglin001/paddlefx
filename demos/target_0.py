@@ -5,13 +5,13 @@ import logging
 # ignore DeprecationWarning from `pkg_resources`
 logging.captureWarnings(True)
 
-logging.basicConfig(level=logging.DEBUG, format="%(message)s")
-
 
 import paddle
 import paddle.nn
 
 import paddlefx
+
+logging.basicConfig(level=logging.DEBUG, format="%(message)s")
 
 
 def my_compiler(gl: paddlefx.GraphLayer, example_inputs: list[paddle.Tensor] = None):
