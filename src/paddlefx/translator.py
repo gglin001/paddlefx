@@ -173,11 +173,13 @@ class OutputGraph(Tracer):
 
         name = unique_id("__compiled_fn")
 
-        logging.debug(f"\n{name}:")
+        logging.debug(f"{name} - gl.src:\n{gl.src}")
+
+        logging.debug(f"{name}:")
         [logging.debug(x) for x in list(dis.get_instructions(compiled_fn))]
         logging.debug(f"")
 
-        logging.debug(f"\n{name}.fn:")
+        logging.debug(f"{name}.fn:")
         [logging.debug(x) for x in list(dis.get_instructions(compiled_fn.fn))]
         logging.debug(f"")
 
