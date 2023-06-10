@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import collections
 import copy
 import dis
 import functools
@@ -7,22 +8,22 @@ import logging
 import operator
 import types
 
-from typing import Any
+from typing import Any, NamedTuple
 
 import paddle
 import paddle.nn
 
-from .bytecode_transformation import Instruction, create_instruction
-from .output_graph import OutputGraph
+from .bytecode_transformation import (
+    Instruction,
+    create_call_function,
+    create_instruction,
+)
+from .codegen import PyCodegen
+from .output_graph import OutputGraph, unique_id
 from .proxy import Attribute, Proxy
+from .resume_execution import ContinueExecutionCache
 
 # TODO: better code organization
-
-
-def create_instruction(name, *, arg=None, argval=None, target=None):
-    return Instruction(
-        opcode=dis.opmap[name], opname=name, arg=arg, argval=argval, target=target
-    )
 
 
 def _binary_constructor(op_name: str):
@@ -49,109 +50,6 @@ def _not_implemented(op_name):
         raise NotImplementedError()
 
     return _not_impl
-
-
-_unique_id_counter = itertools.count()
-
-
-def unique_id(name):
-    return f"{name}_{next(_unique_id_counter)}"
-
-
-class OutputGraph(Tracer):
-    def __init__(
-        self,
-        *,
-        f_globals: dict[str, Any],
-        code_options: dict,
-        compiler_fn: Any,
-    ):
-        super().__init__()
-
-        self.f_globals = f_globals
-        self.code_options = code_options
-        self.compiler_fn = compiler_fn
-
-        self.output_instructions: list[Instruction] = []
-
-    @property
-    def placeholders(self):
-        r = []
-        for node in self.graph.nodes:
-            if node.op == "placeholder":
-                r.append(node)
-                continue
-            break
-        return r
-
-    def install_global(self, name, value) -> None:
-        self.f_globals[name] = value
-
-    def update_co_names(self, name: str):
-        if name not in self.code_options["co_names"]:
-            self.code_options["co_names"] += (name,)
-
-    def add_output_instructions(self, prefix: list[Instruction]) -> None:
-        self.output_instructions.extend(prefix)
-
-    def call_user_compiler(self, gl):
-        compiled_fn = self.compiler_fn(gl)
-        return compiled_fn
-
-    def compile_and_call_fx_graph(self, tx, rv, root):
-        from .codegen import PyCodegen
-        from .eval_frame import disable
-
-        self.create_node("output", "output", tuple(x for x in rv), {})
-
-        gl = GraphLayer(root, self.graph)
-
-        compiled_fn = self.call_user_compiler(gl)
-        compiled_fn = disable(compiled_fn)
-
-        name = unique_id("__compiled_fn")
-
-        logging.debug(f"{name} - gl.src:\n{gl.src}")
-
-        logging.debug(f"{name}:")
-        [logging.debug(x) for x in list(dis.get_instructions(compiled_fn))]
-        logging.debug(f"")
-
-        logging.debug(f"{name}.fn:")
-        [logging.debug(x) for x in list(dis.get_instructions(compiled_fn.fn))]
-        logging.debug(f"")
-
-        self.install_global(name, compiled_fn)
-
-        cg = PyCodegen(tx)
-        cg.make_call_generated_code(name)
-        return cg.get_instructions()
-
-    def compile_subgraph(
-        self,
-        tx: InstructionTranslatorBase,
-    ):
-        stack_values = list(tx.stack)
-
-        if not (root := tx.frame.f_locals.get('self', None)):
-            root = paddle.nn.Layer()
-
-        instructions = []
-        instructions.extend(
-            self.compile_and_call_fx_graph(
-                tx,
-                list(reversed(stack_values)),
-                root,
-            )
-        )
-
-        # for outputs == 0
-        # instructions.append(create_instruction("POP_TOP"))
-
-        # for outputs != 0
-        # instructions.append(create_instruction("UNPACK_SEQUENCE", arg=1))
-
-        self.add_output_instructions(instructions)
 
 
 BINARY_MAPPER = {
@@ -200,9 +98,7 @@ def break_graph_if_unsupported(*, push):
             state = self.copy_graphstate()
             try:
                 return inner_fn(self, inst)
-            except NotImplementedError as excp:
-                pass
-
+            except NotImplementedError as exc:
                 logging.debug(
                     "break_graph_if_unsupported triggered compile", exc_info=True
                 )
@@ -232,6 +128,18 @@ def break_graph_if_unsupported(*, push):
     return decorator
 
 
+class InstructionTranslatorGraphState(NamedTuple):
+    # output: OutputGraphState
+    symbolic_locals: dict[str, Any]
+    # stack: List[VariableTracker]
+    # block_stack: List[BlockStackEntry]
+    block_stack: list[Any]
+    instruction_pointer: int | None
+    current_instruction: Instruction
+    next_instruction: Instruction | None
+    # lineno: int
+
+
 class InstructionTranslatorBase:
     def __init__(
         self,
@@ -245,9 +153,16 @@ class InstructionTranslatorBase:
         self.output: OutputGraph = output
 
         self.f_locals = {}
+        self.f_globals: dict[str, Any] = frame.f_globals
+        self.f_code = frame.f_code
+
         self.stack = []
         for k, _ in frame.f_locals.items():
             self.f_locals[k] = self.output._proxy_placeholder(k)
+
+        self.instruction_pointer = 0
+        self.current_instruction: Instruction = create_instruction("NOP")
+        self.next_instruction: Instruction | None = None
 
     def pop(self):
         return self.stack.pop()
@@ -453,6 +368,33 @@ class InstructionTranslatorBase:
         res = self.output.create_node('call_function', op, args, {})
         self.push(res)
 
+    def copy_graphstate(self) -> InstructionTranslatorGraphState:
+        """Create a checkpoint of the current state by copying everything."""
+        return InstructionTranslatorGraphState(
+            # self.output.copy_graphstate(),
+            collections.OrderedDict(self.f_locals),
+            list(self.stack),
+            # list(self.block_stack),
+            self.instruction_pointer,
+            self.current_instruction,
+            self.next_instruction,
+            # self.lineno,
+        )
+
+    def restore_graphstate(self, state: InstructionTranslatorGraphState):
+        """Restore a checkpoint created by self.copy_graphstate()"""
+        (
+            # output_state,
+            self.f_locals,
+            self.stack,
+            # self.block_stack,
+            self.instruction_pointer,
+            self.current_instruction,
+            self.next_instruction,
+            # self.lineno,
+        ) = state
+        # self.output.restore_graphstate(output_state)
+
 
 for mapper, constructor in zip(OP_MAPPER, CONSTRUCTOR):
     for op_name, func_name in mapper.items():
@@ -483,12 +425,78 @@ class InstructionTranslator(InstructionTranslatorBase):
             output=output,
         )
 
-    def step(self, inst: Instruction):
-        if not hasattr(self, inst.opname):
-            raise Exception(f"missing: {inst.opname}")
-        getattr(self, inst.opname)(inst)
+    def step(self):
+        inst = self.instructions[self.instruction_pointer]
+        self.current_instruction = inst
+        self.instruction_pointer += 1
+
+        if self.instruction_pointer < len(self.instructions):
+            self.next_instruction = self.instructions[self.instruction_pointer]
+        else:
+            self.instruction_pointer = None
+            self.next_instruction = None
+
+        try:
+            if not hasattr(self, inst.opname):
+                raise Exception(f"missing: {inst.opname}")
+            print(f"== TRACEING {inst}")
+            getattr(self, inst.opname)(inst)
+
+            return inst.opname != "RETURN_VALUE"
+        except NotImplemented as exc:
+            # TODO: create graph break
+            raise exc
 
     def run(self):
-        # TODO: support graph break
-        for inst in self.instructions:
-            self.step(inst)
+        try:
+            while (
+                self.instruction_pointer is not None
+                and not self.output.should_exit
+                and self.step()
+            ):
+                pass
+        except:
+            raise
+
+    def create_call_resume_at(self, inst: Instruction):
+        self.instruction_pointer = None
+
+        if inst.opname == "RETURN_VALUE":
+            return [create_instruction("RETURN_VALUE")]
+
+        argnames = tuple(k for k in self.f_locals.keys())
+
+        cg = PyCodegen(self)
+
+        stack_len = len(self.stack)
+        nargs = stack_len + len(argnames)
+
+        name = unique_id(f"__resume_at_{inst.offset}")
+
+        # TODO: add block_stack
+        self.block_stack = []
+        new_code: types.CodeType = ContinueExecutionCache.lookup(
+            self.f_code,
+            inst.offset,  # self.lineno,
+            inst.starts_line,
+            tuple(b.target.offset for b in self.block_stack),
+            stack_len,
+            argnames,
+            tuple(b.resume_fn() for b in self.block_stack),
+            tuple([]),
+        )
+
+        print(f"new_code:")
+        import dis
+
+        [print(x) for x in dis.get_instructions(new_code)]
+
+        self.output.install_global(
+            name, types.FunctionType(new_code, self.f_globals, name)
+        )
+        cg.extend_output(cg.load_function_name(name, True, stack_len))
+
+        cg.extend_output([cg.create_load(k) for k in argnames])
+        cg.extend_output(create_call_function(nargs, False))
+        cg.append_output(create_instruction("RETURN_VALUE"))
+        return cg.get_instructions()

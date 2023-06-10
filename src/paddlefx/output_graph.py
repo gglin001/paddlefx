@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import dis
-import itertools
 import logging
 
 from typing import TYPE_CHECKING, Any
@@ -9,18 +8,12 @@ from typing import TYPE_CHECKING, Any
 import paddle
 import paddle.nn
 
-from .bytecode_transformation import Instruction
+from .bytecode_transformation import Instruction, unique_id
 from .graph_layer import GraphLayer
 from .symbolic_trace import Tracer
 
 if TYPE_CHECKING:
     from .translator import Instruction, InstructionTranslatorBase, unique_id
-
-_unique_id_counter = itertools.count()
-
-
-def unique_id(name):
-    return f"{name}_{next(_unique_id_counter)}"
 
 
 class OutputGraph(Tracer):
@@ -36,6 +29,7 @@ class OutputGraph(Tracer):
         self.f_globals = f_globals
         self.code_options = code_options
         self.compiler_fn = compiler_fn
+        self.should_exit = False
 
         self.output_instructions: list[Instruction] = []
 
@@ -58,6 +52,7 @@ class OutputGraph(Tracer):
 
     def add_output_instructions(self, prefix: list[Instruction]) -> None:
         self.output_instructions.extend(prefix)
+        self.should_exit = True
 
     def call_user_compiler(self, gl):
         compiled_fn = self.compiler_fn(gl)
@@ -110,10 +105,6 @@ class OutputGraph(Tracer):
             )
         )
 
-        # for outputs == 0
-        # instructions.append(create_instruction("POP_TOP"))
-
-        # for outputs != 0
-        # instructions.append(create_instruction("UNPACK_SEQUENCE", arg=1))
+        print(f"== stack_values: {stack_values}")
 
         self.add_output_instructions(instructions)
