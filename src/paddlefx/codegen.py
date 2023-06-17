@@ -62,6 +62,12 @@ class PyCodegen:
         )
         self.extend_output([call_function])
 
+    def create_store(self, name):
+        # if name in self.cell_and_freevars():
+        #     return create_instruction("STORE_DEREF", argval=name)
+        assert name in self.code_options["co_varnames"]
+        return create_instruction("STORE_FAST", argval=name)
+
     def create_load(self, name):
         # if name in self.cell_and_freevars():
         #     return create_instruction("LOAD_DEREF", argval=name)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dis
+import itertools
 import logging
 
 from typing import TYPE_CHECKING, Any
@@ -42,6 +43,14 @@ class OutputGraph(Tracer):
                 continue
             break
         return r
+
+    def new_var(self, name="tmp"):
+        existing = set(self.code_options["co_varnames"])
+        for i in itertools.count():
+            var = f"___{name}_{i}"
+            if var not in existing:
+                self.code_options["co_varnames"] += (var,)
+                return var
 
     def install_global(self, name, value) -> None:
         self.f_globals[name] = value
@@ -91,12 +100,15 @@ class OutputGraph(Tracer):
         self,
         tx: InstructionTranslatorBase,
     ):
+        from .codegen import PyCodegen
+
         stack_values = list(tx.stack)
 
         if not (root := tx.frame.f_locals.get('self', None)):
             root = paddle.nn.Layer()
 
         instructions = []
+
         instructions.extend(
             self.compile_and_call_fx_graph(
                 tx,
@@ -106,5 +118,12 @@ class OutputGraph(Tracer):
         )
 
         print(f"== stack_values: {stack_values}")
+
+        graph_output_var = self.new_var("graph_out")
+        # graph_output_var = None
+        cg0 = PyCodegen(tx)
+        instructions.append(cg0.create_store(graph_output_var))
+
+        instructions.append(cg0.create_load(graph_output_var))
 
         self.add_output_instructions(instructions)
