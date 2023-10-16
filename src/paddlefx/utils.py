@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import dis
-import os
-import sys
 import traceback
 import types
 
@@ -12,10 +10,6 @@ from loguru import logger
 
 if TYPE_CHECKING:
     from .bytecode_transformation import Instruction
-
-logger.remove()
-logger.add(sys.stdout, level=os.environ.get("LOG_LEVEL", "INFO"))
-
 
 def format_bytecode(prefix, name, filename, line_no, code):
     return f"{prefix} {name} {filename} line {line_no} \n{dis.Bytecode(code).dis()}"
