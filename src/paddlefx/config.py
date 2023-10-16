@@ -6,6 +6,8 @@ import sys
 from loguru import logger
 
 # setup logger
-logging_level = os.environ.get("PADDLEFX_LOG_LEVEL", "INFO")
 logger.remove()
-logger.add(sys.stdout, level=logging_level)
+logging_level = os.environ.get("PADDLEFX_LOG_LEVEL", "DEBUG")
+fmt = None
+fmt = '<level>{level: <8}</level> | <cyan>{file.path}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>'
+logger.add(sys.stdout, level=logging_level, format=fmt)
