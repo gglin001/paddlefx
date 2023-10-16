@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from . import config # noqa
-
+from . import config  # noqa
 from .eval_frame import optimize  # noqa
 from .graph import Graph  # noqa
 from .graph_layer import GraphLayer  # noqa
